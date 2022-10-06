@@ -72,6 +72,7 @@ type Game struct {
 	RoundWinner     uuid.UUID
 	WaitForRound    bool
 	IsAuthoritative bool
+	AskReset        bool
 }
 
 func NewGame() *Game {
@@ -83,6 +84,7 @@ func NewGame() *Game {
 		IsAuthoritative: true,
 		WaitForRound:    true,
 		Score:           make(map[uuid.UUID]int),
+		AskReset:        false,
 	}
 	return &game
 }
@@ -104,9 +106,7 @@ func (game *Game) watchActions() {
 		if game.WaitForRound {
 			continue
 		}
-		//game.Mu.Lock()
 		action.Perform(game)
-		//game.Mu.Unlock()
 	}
 }
 
@@ -128,15 +128,11 @@ func (game *Game) PlayerExists(id uuid.UUID) bool {
 }
 
 func (game *Game) AddPlayer(player *Player) {
-	//game.Mu.Lock()
 	game.Players[player.ID()] = *player
-	//game.Mu.Unlock()
 }
 
 func (game *Game) RemovePlayer(id uuid.UUID) {
-	//game.Mu.Lock()
 	delete(game.Players, id)
-	//game.Mu.Unlock()
 }
 
 func (message MessageAction) Perform(game *Game) {
@@ -166,12 +162,6 @@ func (game *Game) QueueNewRound(roundWinner uuid.UUID) {
 	game.NewRoundAt = time.Now().Add(newRoundWaitTime)
 	game.RoundWinner = roundWinner
 	game.sendChange(RoundOverChange{})
-	//go func() {
-	//	time.Sleep(newRoundWaitTime)
-	//	//game.Mu.Lock()
-	//	game.StartNewRound()
-	//	//game.Mu.Unlock()
-	//}()
 }
 
 func (game *Game) StartNewRound() {

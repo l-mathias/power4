@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-func NewConsole() Console {
-	return Console{}
-}
-
 type Console struct {
 }
 
@@ -85,10 +81,16 @@ func (s *GameServer) AskColumnTo(player domain.Player) (int, error) {
 
 func (s *GameServer) Congratulate(player domain.Player) {
 	msg := fmt.Sprintln()
-	msg += fmt.Sprintf("congratulations player '%s' you win!", string(player.GetSymbol()))
+	msg += fmt.Sprintf("You're just a looser '%s'...", string(player.GetSymbol()))
 	msg += fmt.Sprintln()
 
 	s.send("Server", s.GetActiveClient().id.String(), msg)
+
+	msg = fmt.Sprintln()
+	msg += fmt.Sprintf("congratulations player '%s' you win!", string(player.GetSymbol()))
+	msg += fmt.Sprintln()
+
+	s.send("Server", s.GetInactiveClient().id.String(), msg)
 }
 
 func (s *GameServer) Slap(player domain.Player, err error) {
@@ -96,6 +98,8 @@ func (s *GameServer) Slap(player domain.Player, err error) {
 	msg := fmt.Sprintln()
 	msg += fmt.Sprintf("player '%s' %s", string(player.GetSymbol()), err.Error())
 	msg += fmt.Sprintln()
+
+	s.invertActive()
 
 	s.send("Server", s.GetActiveClient().id.String(), msg)
 }
@@ -106,5 +110,14 @@ func (s *GameServer) NoWinner() {
 	msg += fmt.Sprintln("nobody wins, losers!")
 	msg += fmt.Sprintln()
 
-	s.send("Server", s.GetActiveClient().id.String(), msg)
+	resp := proto.StreamResponse{
+		Event: &proto.StreamResponse_ResponseMessage{
+			ResponseMessage: &proto.Message{
+				From:    "Server",
+				Message: msg,
+			},
+		},
+	}
+	s.broadcast(&resp)
+
 }

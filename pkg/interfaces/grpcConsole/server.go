@@ -84,6 +84,16 @@ func (s *GameServer) GetActiveClient() *client {
 	return nil
 }
 
+func (s *GameServer) GetInactiveClient() *client {
+	for _, c := range s.clients {
+		if !c.active {
+			return c
+		}
+	}
+
+	return nil
+}
+
 func (s *GameServer) watchTimeout() {
 	timeoutTicker := time.NewTicker(1 * time.Minute)
 	go func() {
@@ -239,6 +249,9 @@ func (s *GameServer) handleRoundOverChange(change core.RoundOverChange) {
 			},
 		},
 	}
+
+	s.Game.AskReset = true
+	s.Game.WaitForRound = true
 	s.broadcast(&resp)
 }
 
@@ -336,6 +349,8 @@ func (s *GameServer) Stream(srv proto.Game_StreamServer) error {
 	}
 	currentClient.streamServer = srv
 
+	msg := fmt.Sprintf("Welcome %v, let's start soon...", s.Game.Players[currentClient.playerID].Name)
+	s.send("Server", currentClient.id.String(), msg)
 	// Wait for stream requests.
 	go func() {
 		for {
@@ -393,7 +408,7 @@ func (s *GameServer) invertActive() {
 
 func (s *GameServer) handleMessageRequest(req *proto.StreamRequest, currentClient *client) {
 
-	if currentClient.active {
+	if currentClient.active && len(s.clients) == 2 {
 		msg := req.GetRequestMessage()
 
 		resp := proto.StreamResponse{
@@ -408,9 +423,7 @@ func (s *GameServer) handleMessageRequest(req *proto.StreamRequest, currentClien
 		go func() { s.GameChan <- &resp }()
 
 		s.broadcast(&resp)
-		if len(s.clients) == 2 {
-			s.invertActive()
-		}
+		s.invertActive()
 	} else {
 		s.send("Server", currentClient.id.String(), "Not your turn !")
 	}

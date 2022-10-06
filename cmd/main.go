@@ -16,11 +16,12 @@ import (
 )
 
 var (
-	grid     domain.Grid
-	player1  domain.Player
-	player2  domain.Player
-	game     usecase.Game
-	intrface interfaces.Interface
+	grid       domain.Grid
+	player1    domain.Player
+	player2    domain.Player
+	game       usecase.Game
+	intrface   interfaces.Interface
+	serverGame *core.Game
 )
 
 func init() {
@@ -28,7 +29,6 @@ func init() {
 	player1 = local.NewPlayer('x')
 	player2 = local.NewPlayer('o')
 	game = usecase.NewGame(grid, player1, player2)
-	//intrface = grpcConsole.NewConsole() //console.NewConsole()
 }
 
 func main() {
@@ -43,27 +43,28 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	serverGame := core.NewGame()
+	serverGame = core.NewGame()
 
 	serverGame.Start()
-
-	go func() {
-		for {
-			if !serverGame.WaitForRound {
-				//grid = local.NewGrid()
-				//player1 = local.NewPlayer('x')
-				//player2 = local.NewPlayer('o')
-				//game = usecase.NewGame(grid, player1, player2)
-				log.Printf("wait status: %v", serverGame.WaitForRound)
-				game.Play(intrface)
-			}
-		}
-	}()
 
 	s := grpc.NewServer()
 	server := grpcConsole.NewGameServer(serverGame, *password)
 	proto.RegisterGameServer(s, server)
 	intrface = server
+
+	go func() {
+		for {
+			if !serverGame.WaitForRound || serverGame.AskReset {
+				log.Printf("\n\nserverGame.AskReset value: %v \n\n", serverGame.AskReset)
+				serverGame.AskReset = false
+				grid = local.NewGrid()
+				player1 = local.NewPlayer('x')
+				player2 = local.NewPlayer('o')
+				game = usecase.NewGame(grid, player1, player2)
+				game.Play(intrface)
+			}
+		}
+	}()
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
