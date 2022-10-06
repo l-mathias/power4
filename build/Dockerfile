@@ -4,7 +4,7 @@ WORKDIR /build
 
 COPY . .
 
-RUN go build -o power4 cmd/main.go
+RUN go build -o power4 grpcConsole/main.go
 
 FROM alpine
 
