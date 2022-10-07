@@ -6,7 +6,6 @@ import (
 	"google.golang.org/grpc"
 	"log"
 	"net"
-	"power4/pkg/domain"
 	"power4/pkg/infrastructure/core"
 	"power4/pkg/infrastructure/local"
 	"power4/pkg/infrastructure/proto"
@@ -16,19 +15,21 @@ import (
 )
 
 var (
-	grid       domain.Grid
-	player1    domain.Player
-	player2    domain.Player
+	//grid       domain.Grid
+	//player1    domain.Player
+	//player2    domain.Player
 	game       usecase.Game
 	intrface   interfaces.Interface
 	serverGame *core.Game
 )
 
 func init() {
-	grid = local.NewGrid()
-	player1 = local.NewPlayer('x')
-	player2 = local.NewPlayer('o')
-	game = usecase.NewGame(grid, player1, player2)
+	//grid = local.NewGrid()
+	//player1 = local.NewPlayer('x')
+	//player2 = local.NewPlayer('o')
+
+	serverGame = core.NewGame()
+	game = usecase.NewGame(serverGame.Grid, serverGame.Player1, serverGame.Player2)
 }
 
 func main() {
@@ -43,8 +44,6 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	serverGame = core.NewGame()
-
 	serverGame.Start()
 
 	s := grpc.NewServer()
@@ -54,13 +53,14 @@ func main() {
 
 	go func() {
 		for {
-			if !serverGame.WaitForRound || serverGame.AskReset {
-				log.Printf("\n\nserverGame.AskReset value: %v \n\n", serverGame.AskReset)
-				serverGame.AskReset = false
-				grid = local.NewGrid()
-				player1 = local.NewPlayer('x')
-				player2 = local.NewPlayer('o')
-				game = usecase.NewGame(grid, player1, player2)
+			if !serverGame.WaitForRound {
+				//grid = local.NewGrid()
+				//player1 = local.NewPlayer('x')
+				//player2 = local.NewPlayer('o')
+				serverGame.Grid = local.NewGrid()
+				serverGame.Player1 = local.NewPlayer('x')
+				serverGame.Player2 = local.NewPlayer('o')
+				game = usecase.NewGame(serverGame.Grid, serverGame.Player1, serverGame.Player2)
 				game.Play(intrface)
 			}
 		}

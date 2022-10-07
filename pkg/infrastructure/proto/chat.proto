@@ -63,7 +63,7 @@ message RemovePlayer {
 
 message RoundOver {
   string roundWinnerId = 1;
-  google.protobuf.Timestamp newRoundAt = 2;
+  string reason = 2;
 }
 
 message RoundStart {

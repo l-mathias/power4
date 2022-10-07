@@ -4,20 +4,22 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"log"
+	"power4/pkg/domain"
+	"power4/pkg/infrastructure/local"
 	"sync"
 	"time"
 )
 
 const (
-	debug            bool = false
-	roundOverScore        = 10
-	newRoundWaitTime      = 10 * time.Second
+	debug          bool = false
+	roundOverScore      = 10
 )
 
 type Change interface{}
 
 type RoundOverChange struct {
 	Change
+	Reason string
 }
 
 type RoundStartChange struct {
@@ -62,29 +64,28 @@ type Player struct {
 }
 
 type Game struct {
-	Players         map[uuid.UUID]Player
-	Mu              sync.RWMutex
-	ChangeChannel   chan Change
-	ActionChannel   chan Action
-	lastAction      map[string]time.Time
-	Score           map[uuid.UUID]int
-	NewRoundAt      time.Time
-	RoundWinner     uuid.UUID
-	WaitForRound    bool
-	IsAuthoritative bool
-	AskReset        bool
+	Grid          domain.Grid
+	Player1       domain.Player
+	Player2       domain.Player
+	Players       map[uuid.UUID]Player
+	Mu            sync.RWMutex
+	ChangeChannel chan Change
+	ActionChannel chan Action
+	Score         map[uuid.UUID]int
+	RoundWinner   uuid.UUID
+	WaitForRound  bool
 }
 
 func NewGame() *Game {
 	game := Game{
-		Players:         make(map[uuid.UUID]Player),
-		ActionChannel:   make(chan Action, 1),
-		lastAction:      make(map[string]time.Time),
-		ChangeChannel:   make(chan Change, 1),
-		IsAuthoritative: true,
-		WaitForRound:    true,
-		Score:           make(map[uuid.UUID]int),
-		AskReset:        false,
+		Grid:          local.NewGrid(),
+		Player1:       local.NewPlayer('x'),
+		Player2:       local.NewPlayer('o'),
+		Players:       make(map[uuid.UUID]Player),
+		ActionChannel: make(chan Action, 1),
+		ChangeChannel: make(chan Change, 1),
+		WaitForRound:  true,
+		Score:         make(map[uuid.UUID]int),
 	}
 	return &game
 }
@@ -157,11 +158,12 @@ func (game *Game) LogDebug(msg string) {
 	}
 }
 
-func (game *Game) QueueNewRound(roundWinner uuid.UUID) {
+func (game *Game) QueueNewRound(roundWinner uuid.UUID, reason string) {
 	game.WaitForRound = true
-	game.NewRoundAt = time.Now().Add(newRoundWaitTime)
 	game.RoundWinner = roundWinner
-	game.sendChange(RoundOverChange{})
+	game.sendChange(RoundOverChange{
+		Reason: reason,
+	})
 }
 
 func (game *Game) StartNewRound() {

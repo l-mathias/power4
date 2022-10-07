@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/golang/protobuf/ptypes"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/metadata"
 	"log"
@@ -20,7 +19,7 @@ const (
 	maxClients    = 2
 )
 
-type client struct {
+type Client struct {
 	streamServer proto.Game_StreamServer
 	lastMessage  time.Time
 	done         chan error
@@ -32,7 +31,7 @@ type client struct {
 type GameServer struct {
 	proto.UnimplementedGameServer
 	Game     *core.Game
-	clients  map[uuid.UUID]*client
+	clients  map[uuid.UUID]*Client
 	mu       sync.RWMutex
 	GameChan chan *proto.StreamResponse
 	password string
@@ -42,7 +41,7 @@ func NewGameServer(game *core.Game, password string) *GameServer {
 
 	server := &GameServer{
 		Game:     game,
-		clients:  make(map[uuid.UUID]*client),
+		clients:  make(map[uuid.UUID]*Client),
 		password: password,
 		GameChan: make(chan *proto.StreamResponse, 1),
 	}
@@ -74,7 +73,7 @@ func (s *GameServer) watchPlay() {
 	}()
 }
 
-func (s *GameServer) GetActiveClient() *client {
+func (s *GameServer) GetActiveClient() *Client {
 	for _, c := range s.clients {
 		if c.active {
 			return c
@@ -84,7 +83,7 @@ func (s *GameServer) GetActiveClient() *client {
 	return nil
 }
 
-func (s *GameServer) GetInactiveClient() *client {
+func (s *GameServer) GetInactiveClient() *Client {
 	for _, c := range s.clients {
 		if !c.active {
 			return c
@@ -168,7 +167,7 @@ func (s *GameServer) Login(ctx context.Context, req *proto.LoginRequest) (*proto
 	// Add the new client.
 	s.mu.Lock()
 	token := uuid.New()
-	s.clients[token] = &client{
+	s.clients[token] = &Client{
 		id:          token,
 		playerID:    playerID,
 		done:        make(chan error),
@@ -193,6 +192,7 @@ func (s *GameServer) displayClients() {
 }
 
 func (s *GameServer) send(from, to, msg string) {
+	s.mu.Lock()
 	specMsg := proto.StreamResponse{
 		Event: &proto.StreamResponse_ResponseMessage{
 			ResponseMessage: &proto.Message{
@@ -202,8 +202,6 @@ func (s *GameServer) send(from, to, msg string) {
 			},
 		},
 	}
-
-	s.mu.Lock()
 
 	dest, err := uuid.Parse(to)
 
@@ -237,20 +235,16 @@ func (s *GameServer) broadcast(resp *proto.StreamResponse) {
 func (s *GameServer) handleRoundOverChange(change core.RoundOverChange) {
 	s.Game.Mu.RLock()
 	defer s.Game.Mu.RUnlock()
-	timestamp, err := ptypes.TimestampProto(s.Game.NewRoundAt)
-	if err != nil {
-		log.Fatalf("unable to parse new round timestamp %v", s.Game.NewRoundAt)
-	}
+
 	resp := proto.StreamResponse{
 		Event: &proto.StreamResponse_RoundOver{
 			RoundOver: &proto.RoundOver{
 				RoundWinnerId: s.Game.RoundWinner.String(),
-				NewRoundAt:    timestamp,
+				Reason:        change.Reason,
 			},
 		},
 	}
 
-	s.Game.AskReset = true
 	s.Game.WaitForRound = true
 	s.broadcast(&resp)
 }
@@ -319,7 +313,7 @@ func (s *GameServer) watchChanges() {
 	}()
 }
 
-func (s *GameServer) getClientFromContext(ctx context.Context) (*client, error) {
+func (s *GameServer) getClientFromContext(ctx context.Context) (*Client, error) {
 	headers, ok := metadata.FromIncomingContext(ctx)
 	tokenRaw := headers["authorization"]
 	if len(tokenRaw) == 0 {
@@ -378,6 +372,7 @@ func (s *GameServer) Stream(srv proto.Game_StreamServer) error {
 	log.Printf(`stream done with error "%v"`, doneError)
 
 	log.Printf("%s - removing client", currentClient.id)
+	reason := fmt.Sprintf("%v was disconnected, waiting for a player...", s.Game.Players[currentClient.playerID].Name)
 	s.removeClient(currentClient.id)
 	s.removePlayer(currentClient.playerID)
 
@@ -391,7 +386,8 @@ func (s *GameServer) Stream(srv proto.Game_StreamServer) error {
 	s.mu.Unlock()
 
 	// this client is not the winner in case of disconnect, change this
-	s.Game.QueueNewRound(currentClient.playerID)
+
+	s.Game.QueueNewRound(currentClient.playerID, reason)
 	return doneError
 }
 
@@ -406,7 +402,7 @@ func (s *GameServer) invertActive() {
 	}
 }
 
-func (s *GameServer) handleMessageRequest(req *proto.StreamRequest, currentClient *client) {
+func (s *GameServer) handleMessageRequest(req *proto.StreamRequest, currentClient *Client) {
 
 	if currentClient.active && len(s.clients) == 2 {
 		msg := req.GetRequestMessage()
@@ -422,7 +418,6 @@ func (s *GameServer) handleMessageRequest(req *proto.StreamRequest, currentClien
 
 		go func() { s.GameChan <- &resp }()
 
-		s.broadcast(&resp)
 		s.invertActive()
 	} else {
 		s.send("Server", currentClient.id.String(), "Not your turn !")

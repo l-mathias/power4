@@ -68,7 +68,7 @@ func (c *GameClient) Login(grpcClient proto.GameClient, playerID uuid.UUID, play
 }
 
 func (c *GameClient) Exit(message string) {
-	log.Println(message)
+	log.Fatalln(message)
 }
 
 func (c *GameClient) handleMessageChange(change core.MessageChange) {
@@ -103,6 +103,7 @@ func (c *GameClient) Start() {
 			resp, err := c.Stream.Recv()
 			if err != nil {
 				c.Exit(fmt.Sprintf("can not receive, error: %v", err))
+				c.Stream.Context().Done()
 				return
 			}
 
@@ -118,8 +119,7 @@ func (c *GameClient) Start() {
 				c.Game.LogDebug(fmt.Sprintf("Received StreamResponse_ClientMessage\n"))
 				c.handleClientMessageResponse(resp)
 			case *proto.StreamResponse_RoundOver:
-				//c.Game.LogDebug(fmt.Sprintf("Received StreamResponse_RoundOver\n"))
-				log.Printf("received RoundOver Response")
+				c.Game.LogDebug(fmt.Sprintf("Received StreamResponse_RoundOver\n"))
 				c.handleRoundOver(resp)
 			}
 			c.Game.Mu.Unlock()
@@ -148,7 +148,8 @@ func (c *GameClient) Start() {
 }
 
 func (c *GameClient) handleRoundOver(resp *proto.StreamResponse) {
-	log.Printf("handled RoundOverChange")
+	e := resp.GetRoundOver()
+	log.Println(e.Reason)
 }
 
 func (c *GameClient) handleClientRemovePlayer(resp *proto.StreamResponse) {
@@ -160,10 +161,7 @@ func (c *GameClient) handleClientRemovePlayer(resp *proto.StreamResponse) {
 
 func (c *GameClient) handleClientAddPlayer(resp *proto.StreamResponse) {
 	e := resp.GetAddPlayer()
-
-	//c.Game.Mu.Lock()
 	c.Game.AddPlayer(proto.GetCommonPlayer(e.Player))
-	//c.Game.Mu.Unlock()
 
 	log.Printf("%v joined the game\n", e.Player.Name)
 }

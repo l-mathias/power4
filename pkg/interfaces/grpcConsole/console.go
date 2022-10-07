@@ -42,6 +42,7 @@ func (s *GameServer) ShowGrid(grid domain.Grid) {
 			},
 		},
 	}
+
 	s.broadcast(&resp)
 }
 
@@ -81,13 +82,13 @@ func (s *GameServer) AskColumnTo(player domain.Player) (int, error) {
 
 func (s *GameServer) Congratulate(player domain.Player) {
 	msg := fmt.Sprintln()
-	msg += fmt.Sprintf("You're just a looser '%s'...", string(player.GetSymbol()))
+	msg += fmt.Sprintf("You're just a looser '%s'...", s.Game.Players[s.GetActiveClient().playerID].Name)
 	msg += fmt.Sprintln()
 
 	s.send("Server", s.GetActiveClient().id.String(), msg)
 
 	msg = fmt.Sprintln()
-	msg += fmt.Sprintf("congratulations player '%s' you win!", string(player.GetSymbol()))
+	msg += fmt.Sprintf("Congratulations player '%s' you win!", s.Game.Players[s.GetInactiveClient().playerID].Name)
 	msg += fmt.Sprintln()
 
 	s.send("Server", s.GetInactiveClient().id.String(), msg)

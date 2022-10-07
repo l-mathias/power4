@@ -1,4 +1,4 @@
-package grpcClient
+package main
 
 import (
 	"flag"
@@ -6,6 +6,7 @@ import (
 	"google.golang.org/grpc"
 	"log"
 	"power4/pkg/infrastructure/core"
+	"power4/pkg/infrastructure/grpcClient"
 	"power4/pkg/infrastructure/proto"
 )
 
@@ -22,10 +23,9 @@ func init() {
 
 func main() {
 	game := core.NewGame()
-	game.IsAuthoritative = false
 	game.Start()
 
-	info := ConnectInfo{
+	info := grpcClient.ConnectInfo{
 		PlayerName: playerName,
 		Address:    host,
 		Password:   password,
@@ -37,11 +37,11 @@ func main() {
 		log.Fatalf("can not connect with pkg %v", err)
 	}
 
-	grpcClient := proto.NewGameClient(conn)
-	client := NewGameClient(game)
+	gameClient := proto.NewGameClient(conn)
+	client := grpcClient.NewGameClient(game)
 
 	playerID := uuid.New()
-	err = client.Login(grpcClient, playerID, info.PlayerName, info.Password)
+	err = client.Login(gameClient, playerID, info.PlayerName, info.Password)
 	if err != nil {
 		log.Fatalf("connect request failed %v", err)
 	}
